@@ -1,0 +1,5 @@
+{
+    "id": "production",
+    "description": "environments production data_bag_item",
+    "application_url" : "amqpdemo.dev"
+}

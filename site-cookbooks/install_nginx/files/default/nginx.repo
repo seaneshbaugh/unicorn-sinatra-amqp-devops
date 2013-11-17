@@ -1,0 +1,13 @@
+[nginx]
+name=nginx - RHEL 6 - $basearch
+baseurl=http://nginx.org/packages/rhel/6/$basearch
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/nginx_signing.key
+enabled=1
+priority=1
+failovermethod=priority
+fastestmirror_enabled=0
+mirror_expire=300
+metadata_expire=300
+retries=5
+timeout=10

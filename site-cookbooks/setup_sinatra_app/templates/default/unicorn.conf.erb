@@ -1,0 +1,59 @@
+worker_processes <%= node[:unicorn][:worker_processes] %>
+
+user "<%= @deploy[:deploy_user] %>"
+
+working_directory "<%= @deploy[:deploy_to] %>/current"
+
+listen "/tmp/unicorn_<%= node[:commons][:application] %>.sock", backlog: <%= node[:unicorn][:backlog] %>
+
+timeout <%= node[:unicorn][:timeout] %>
+
+pid "<%= @deploy[:deploy_to] %>/shared/pids/unicorn.pid"
+
+stderr_path "<%= @deploy[:deploy_to] %>/shared/log/unicorn.log"
+stdout_path "<%= @deploy[:deploy_to] %>/shared/log/unicorn.log"
+
+preload_app <%= node[:unicorn][:preload_app] %>
+
+before_exec do |server|
+  ENV['BUNDLE_GEMFILE'] = "<%= @deploy[:deploy_to]%>/current/Gemfile"
+end
+
+before_fork do |server, worker|
+  # Before forking, kill the master process that belongs to the .oldbin PID.
+  # This enables 0 downtime deploys.
+  old_pid = "<%= @deploy[:deploy_to]%>/shared/pids/unicorn.pid.oldbin"
+
+  if File.exists?(old_pid) && server.pid != old_pid
+    begin
+      Process.kill("QUIT", File.read(old_pid).to_i)
+    rescue Errno::ENOENT, Errno::ESRCH
+      # someone else did our job for us
+    end
+  end
+end
+
+after_fork do |server, worker|
+  require 'amqp'
+  require 'json'
+
+  Thread.new do
+    AMQP.start
+  end
+
+  sleep(1.0)
+
+  EventMachine.next_tick do
+    AMQP.channel ||= AMQP::Channel.new(AMQP.connection)
+
+    AMQP.channel.queue('signup-queue', durable: true)
+
+    3.times do |i|
+      puts "[after_fork/amqp] Publishing a warmup message ##{i}"
+
+      payload = { message: "Warmup message #{i}, sent at #{Time.now.to_s}" }
+
+      AMQP.channel.default_exchange.publish(payload.to_json, routing_key: 'signup')
+    end
+  end
+end
