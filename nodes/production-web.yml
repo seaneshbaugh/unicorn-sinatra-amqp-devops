@@ -7,4 +7,4 @@ roles:
 recipes:
 
 server:
-  host: 192.168.0.12
+  host: 10.50.50.138

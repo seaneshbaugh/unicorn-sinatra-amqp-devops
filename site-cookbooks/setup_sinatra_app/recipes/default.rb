@@ -35,7 +35,7 @@ directory "#{deploy_to}/releases" do
   recursive true
 end
 
-['log','config','system','pids','scripts'].each do |dir_name|
+%w(log config system pids scripts).each do |dir_name|
   directory "#{deploy_to}/shared/#{dir_name}" do
     group deploy_user
     owner deploy_user
@@ -45,15 +45,17 @@ end
   end
 end
 
-template "#{node['nginx']['dir']}/nginx.conf" do
-  source "nginx.conf.erb"
-  only_if { File.exists? "#{node['nginx']['dir']}/nginx.conf" }
+template "#{deploy_to}/shared/config/settings.yml" do
+  mode 0644
+  owner deploy_user
+  group deploy_user
+  source 'settings.yml.erb'
 end
 
-execute 'stop unicorn' do
-  command "#{deploy_to}/shared/scripts/unicorn stop"
+template "#{node['nginx']['dir']}/nginx.conf" do
+  source 'nginx.conf.erb'
   only_if do
-    File.exists?("#{deploy_to}/shared/scripts/unicorn")
+    File.exists? "#{node['nginx']['dir']}/nginx.conf"
   end
 end
 
@@ -62,7 +64,7 @@ template "#{deploy_to}/shared/config/unicorn.conf" do
   owner deploy_user
   group deploy_user
   source 'unicorn.conf.erb'
-  variables(:deploy => node['commons'], :application => application)
+  variables(deploy: node['commons'], application: application)
 end
 
 template "#{deploy_to}/shared/scripts/unicorn" do
@@ -70,7 +72,7 @@ template "#{deploy_to}/shared/scripts/unicorn" do
   owner deploy_user
   group deploy_user
   source 'unicorn.service.erb'
-  variables(:deploy => node['commons'], :application => application)
+  variables(deploy: node['commons'], application: application)
 end
 
 service "unicorn_#{application}" do
@@ -79,4 +81,25 @@ service "unicorn_#{application}" do
   restart_command "#{deploy_to}/shared/scripts/unicorn restart"
   status_command "#{deploy_to}/shared/scripts/unicorn status"
   action :nothing
+end
+
+bash 'stop_app_services' do
+  cwd deploy_home
+  user deploy_user
+  group deploy_user
+  environment 'USER' => "#{deploy_user}", 'HOME' => "#{deploy_home}"
+  code <<-EOH
+    sudo service nginx stop
+    #{deploy_to}/shared/scripts/unicorn stop
+  EOH
+end
+
+bash 'start_app_services' do
+  cwd deploy_home
+  user deploy_user
+  group deploy_user
+  environment 'USER' => "#{deploy_user}", 'HOME' => "#{deploy_home}"
+  code <<-EOH
+    sudo service nginx start
+  EOH
 end
